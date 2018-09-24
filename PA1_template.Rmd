@@ -1,25 +1,206 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Activity monitoring data, (Assigment week 2, Reproducible Research course)"
+output: md_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
-## Loading and preprocessing the data
-
-
-
-## What is mean total number of steps taken per day?
-
+## 1. Code for reading in the dataset and/or processing the data
 
 
-## What is the average daily activity pattern?
+First of all we indicate where the file is, (we have decomprissed previously that file).
+```{r load data}
+setwd("/Users/purificacionvelascomontes/Documents/Personal/Cursos/Coursera_Data_Science/Reproducible_Research_(5)/Week_2/Assignment")
+archivo_entrada <- read.csv("activity.csv")
+```
+We change the format of date field to date format, for next tasks.
+```{r}
+archivo_entrada_date <- archivo_entrada
+archivo_entrada_date$date <- as.Date(archivo_entrada_date$date, format = "%Y-%m-%d")
+```
+
+## 2. Histogram of the total number of steps taken each day
+For this task we are going to need the libraries ggplot and dplyr.
+```{r}
+library(dplyr)
+library(ggplot2)
+
+```
+We calculate the total number of steps, and we remove the NA values.
+```{r}
+steps_per_day <- 
+  archivo_entrada %>%
+  group_by(date) %>%
+  summarize(number_steps = sum(steps, na.rm = TRUE))
+```
+We add a new column to "archivo_entrada" data frame (which is a copy of "date" column), in date format.
+```{r}
+steps_date <- as.Date(archivo_entrada$date, format = "%Y-%m-%d")
+archivo_entrada$date_date <- steps_date
+steps_per_day_date <- steps_per_day
+```
+We are going to draw the histogram; (with the next sentence, we do in axis **X** we see only some dates with correct format).
+```{r}
+steps_per_day_date$date <- as.Date(steps_per_day_date$date, format = "%Y-%m-%d")
+```
+```{r}
+ggplot(data = steps_per_day_date, fill = "blue") +
+  geom_bar(mapping = aes(x = date, y = number_steps), stat = "identity", col = c("orange"), fill = c("navy")) +
+  xlab("Date") + ylab("Number of steps") + labs(title = "Number of steps per day")
+```
+
+##3. Mean and median number of steps taken each day
+We can see the mean and median for all the days.
+```{r}
+mean_overall <- mean(steps_per_day$number_steps)
+mean_overall
+median(steps_per_day$number_steps)
+```
+Or the mean and median for each day
+```{r}
+mean_per_day <- 
+  archivo_entrada %>%
+  group_by(date) %>%
+  filter(!is.na(steps)) %>%  
+  summarize(mean_steps = sum(steps)/mean_overall)
+
+median_per_day <- 
+  archivo_entrada %>%
+  group_by(date) %>%
+  filter(!is.na(steps)) %>%
+  summarize(median_steps = sum(steps)/2)
+```
+
+```{r}
+mean_per_day
+median_per_day
+```
+
+##4. Time series plot of the average number of steps taken
+
+```{r}
+mean_per_day_interval <- 
+  archivo_entrada %>%
+  group_by(interval) %>%
+  summarize(avrg_steps = mean(steps, na.rm = TRUE))
+
+ggplot(mean_per_day_interval, aes(interval, avrg_steps)) + 
+  geom_line(color= "blue") +
+  xlab("Interval") + ylab("Number of steps taken") + 
+  labs(title = "Time series of the average number of steps taken per interval")
+
+```
 
 
 
-## Imputing missing values
+##5. The 5-minute interval that, on average, contains the maximum number of steps.
 
 
+```{r}
+max_number_of_steps <- max(mean_per_day_interval$avrg_steps)
+max_row <- mean_per_day_interval[which(mean_per_day_interval$avrg_steps == max_number_of_steps),]
+max_interval <- max_row$interval
+max_interval
+```
 
-## Are there differences in activity patterns between weekdays and weekends?
+
+##6. Code to describe and show a strategy for imputing missing data.
+a) Total number of missing values in the dataset
+The steps is the unique field that has NA values.
+
+```{r}
+sum(is.na(archivo_entrada$steps))
+```
+
+b) Strategy for filling in all of the missing values in the dataset.
+My strategy is to use the mean steps per interval to filling the missing values.    
+First, we copy the original data frame.
+
+```{r}
+archivo_entrada_filled <- archivo_entrada
+```
+
+We create a function to fill the NA values.
+```{r}
+mean_steps_per_interval <- function(p_interval) {
+  tmp <- mean_per_day_interval[mean_per_day_interval$interval == p_interval,]
+  return(tmp$avrg_steps)
+}
+```
+
+And we use a *for* loop to read the data frame and insert the values.
+```{r}
+for(i in 1:nrow(archivo_entrada_filled)) {
+  if(is.na(archivo_entrada_filled[i,"steps"])) {
+    m_interval <- archivo_entrada_filled[i,"interval"]
+    tmp <- mean_steps_per_interval(m_interval)
+    archivo_entrada_filled[i,"steps"] <- tmp
+  }
+}
+```
+
+##7. Histogram of the total number of steps taken each day after missing values are imputed.
+
+```{r}
+steps_per_day_filled <- 
+  archivo_entrada_filled %>%
+  group_by(date) %>%
+  summarize(number_steps = sum(steps))
+```
+
+```{r}
+steps_per_day_filled_date <- steps_per_day_filled
+```
+
+With this, we can see dates with correct format.
+
+```{r}
+steps_per_day_filled_date$date <- as.Date(steps_per_day_filled_date$date, format = "%Y-%m-%d")
+```
+
+```{r}
+ggplot(data = steps_per_day_filled_date, fill = "blue") +
+  geom_bar(mapping = aes(x = date, y = number_steps), stat = "identity", col = c("orange"), fill = c("navy")) +
+  xlab("Date") + ylab("Number of steps") + labs(title = "Number of steps per day without NA values")
+```
+
+#Mean and median
+```{r}
+mean(steps_per_day_filled$number_steps) 
+median(steps_per_day_filled$number_steps)
+```
+
+##8. Panel plot comparing the average number of steps taken per 5-minute interval across weekdays and weekends.
+
+We are going to create a function to indicate if days are weekdays or weekend.  
+(My system language is Spanish, because I am from Spain; for that the days of week are in Spanish).
+```{r}
+type_of_day <- function(p_day) {
+  day <- weekdays(p_day)
+  if (day %in% c("lunes", "martes", "miércoles", "jueves", "viernes"))
+    return("weekday")
+  else if (day %in% c("sábado", "domingo"))
+    return("weekend")
+  else
+    stop("invalid date")
+}
+```
+
+We filled the field with the type of the day.
+```{r}
+archivo_entrada_filled$day <- sapply(archivo_entrada_filled$date_date, FUN = type_of_day)
+```
+
+And we are going to draw the plot using Lattice system.
+```{r}
+library(lattice)
+transform_data <- transform(archivo_entrada_filled, day = factor(day))
+xyplot(steps ~ interval | day, data = transform_data, type = "l",
+       main = "Activity patterns between weekdays and weekend", 
+       xlab = "Interval",
+       ylab = "Number of steps",
+       layout = c(1,2))
+```
+
